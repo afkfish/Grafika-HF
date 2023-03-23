@@ -18,7 +18,7 @@
 //
 // NYILATKOZAT
 // ---------------------------------------------------------------------------------------------
-// Nev    : Kis Benedek M
+// Nev    : Kis Benedek M.
 // Neptun : JOYAXJ
 // ---------------------------------------------------------------------------------------------
 // ezennel kijelentem, hogy a feladatot magam keszitettem, es ha barmilyen segitseget igenybe vettem vagy
@@ -31,7 +31,6 @@
 // Tudomasul veszem, hogy a forrasmegjeloles kotelmenek megsertese eseten a hazifeladatra adhato pontokat
 // negativ elojellel szamoljak el es ezzel parhuzamosan eljaras is indul velem szemben.
 //=============================================================================================
-#include <iostream>
 #include "framework.h"
 
 // vertex shader in GLSL: It is a Raw string (C++11) since it contains new line characters
@@ -59,53 +58,68 @@ const char * const fragmentSource = R"(
 		outColor = vec4(color, 1);	// computed color is the color of the primitive
 	}
 )";
+// VAO and VBO handles
+GLuint circleVAO;
+GLuint circleVBO;
 
 vec3 meroleges(vec3 v, vec3 p) {
 	return cross(vec3(v.x, v.y, -v.z), vec3(p.x, p.y, -p.z));
 }
 
-struct Circle {
-	float x, y, radius;
+class Circle {
+	float ori_x, ori_y, radius;
+	int fragments;
+	std::vector<float> vertices;
+
+	void computeVertecies() {
+		float angle = 2.0f * 3.1415926f / (float)fragments;
+
+		for (int i = 0; i < fragments; i++) {
+			float x = radius * cos(angle * i);
+			float y = radius * sin(angle * i);
+			vertices.push_back(x + this->ori_x);
+			vertices.push_back(y + this->ori_y);
+		}
+	}
+
+public:
+	Circle(float x, float y, float radius, int fragments = 60) {
+		this->ori_x = x;
+		this->ori_y = y;
+		this->radius = radius;
+		this->fragments = fragments;
+	}
+
+	void draw() {
+		computeVertecies();
+		glGenBuffers(1, &circleVBO);
+		glBindBuffer(GL_ARRAY_BUFFER, circleVBO);
+		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+
+		vertices.clear();
+
+		glGenVertexArrays(1, &circleVAO);
+		glBindVertexArray(circleVAO);
+		glBindBuffer(GL_ARRAY_BUFFER, circleVBO);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+		glEnableVertexAttribArray(0);
+
+		glDrawArrays(GL_TRIANGLE_FAN, 0, fragments);
+
+		glDeleteBuffers(1, &circleVBO);
+		glDeleteVertexArrays(1, &circleVBO);
+	}
+
+	void move(float x, float y) {
+		this->ori_x += x;
+		this->ori_y += y;
+	}
 };
 
 // Global variables
-Circle circle1 = { 0.0f, 0.0f, 1.0f };
-Circle circle2 = { 0.0f, 0.0f, 0.5f };
-Circle circle3 = { 0.0f, 0.0f, 0.25f };
-
-// VAO and VBO handles
-GLuint circleVAO;
-GLuint circleVBO;
-
-void drawCircle(Circle circle, int fragments) {
-	float angle = 2.0f * 3.1415926f / fragments;
-
-	std::vector<float> vertices(fragments * 2);
-	for (int i = 0; i < fragments; i++) {
-		float x = circle.radius * cos(angle * i);
-		float y = circle.radius * sin(angle * i);
-		vertices[i * 2] = x + circle.x;
-		vertices[i * 2 + 1] = y + circle.y;
-	}
-
-	glGenBuffers(1, &circleVBO);
-	glBindBuffer(GL_ARRAY_BUFFER, circleVBO);
-	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-
-	// free up the vertices vector
-	vertices.clear();
-
-	glGenVertexArrays(1, &circleVAO);
-	glBindVertexArray(circleVAO);
-	glBindBuffer(GL_ARRAY_BUFFER, circleVBO);
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
-	glEnableVertexAttribArray(0);
-
-	glDrawArrays(GL_TRIANGLE_FAN, 0, fragments);
-
-	glDeleteBuffers(1, &circleVBO);
-	glDeleteVertexArrays(1, &circleVBO);
-}
+Circle* circle1 = new Circle(0.0f, 0.0f, 1.0f);
+Circle* circle2 = new Circle(0.0f, 0.0f, 0.5f);
+Circle* circle3 = new Circle(0.0f, 0.0f, 0.25f);
 
 GPUProgram gpuProgram; // vertex and fragment shaders
 //unsigned int vao;	   // virtual world on the GPU
@@ -134,31 +148,32 @@ void onDisplay() {
 	int location = glGetUniformLocation(gpuProgram.getId(), "MVP");	// Get the GPU location of uniform variable MVP
 	glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);	// Load a 4x4 row-major float matrix to the specified location
 
-	drawCircle(circle1, 60);
+	circle1->draw();
 	glUniform3f(color, 64.0f/255, 142.0f/255, 145.0f/255);
-	drawCircle(circle2, 60);
+	circle2->draw();
 	glUniform3f(color, 36.0f/255, 89.0f/255, 83.0f/255);
-	drawCircle(circle3, 60);
+	circle3->draw();
 
 	glutSwapBuffers(); // exchange buffers for double buffering
 }
 
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
-	if (key == 'w') {
-		circle2.y += 0.1f;
+	if (key == 27) { // ESCAPE key
+		exit(0);
+	} else if (key == 'w') {
+		circle2->move(0.0f, 0.05f);
 		glutPostRedisplay();
 	} else if (key == 'a') {
-		circle2.x -= 0.1f;
+		circle2->move(-0.05f, 0.0f);
 		glutPostRedisplay();
 	} else if (key == 's') {
-		circle2.y -= 0.1f;
+		circle2->move(0.0f, -0.05f);
 		glutPostRedisplay();
 	} else if (key == 'd') {
-		circle2.x += 0.1f;
+		circle2->move(0.05f, 0.0f);
 		glutPostRedisplay();
-	} else if (key == 27) // ESCAPE key
-		exit(0);
+	}
 }
 
 // Key of ASCII code released
@@ -168,31 +183,31 @@ void onKeyboardUp(unsigned char key, int pX, int pY) {
 // Move mouse with key pressed
 void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the cursor in the coordinate system of the operation system
 	// Convert to normalized device space
-	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
-	float cY = 1.0f - 2.0f * pY / windowHeight;
-	printf("Mouse moved to (%3.2f, %3.2f)\n", cX, cY);
+//	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
+//	float cY = 1.0f - 2.0f * pY / windowHeight;
+//	printf("Mouse moved to (%3.2f, %3.2f)\n", cX, cY);
 }
 
 // Mouse click event
 void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel coordinates of the cursor in the coordinate system of the operation system
 	// Convert to normalized device space
-	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
-	float cY = 1.0f - 2.0f * pY / windowHeight;
-
-	char * buttonStat;
-	switch (state) {
-	case GLUT_DOWN: buttonStat = "pressed"; break;
-	case GLUT_UP:   buttonStat = "released"; break;
-	}
-
-	switch (button) {
-	case GLUT_LEFT_BUTTON:   printf("Left button %s at (%3.2f, %3.2f)\n", buttonStat, cX, cY);   break;
-	case GLUT_MIDDLE_BUTTON: printf("Middle button %s at (%3.2f, %3.2f)\n", buttonStat, cX, cY); break;
-	case GLUT_RIGHT_BUTTON:  printf("Right button %s at (%3.2f, %3.2f)\n", buttonStat, cX, cY);  break;
-	}
+//	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
+//	float cY = 1.0f - 2.0f * pY / windowHeight;
+//
+//	char * buttonStat;
+//	switch (state) {
+//	case GLUT_DOWN: buttonStat = "pressed"; break;
+//	case GLUT_UP:   buttonStat = "released"; break;
+//	}
+//
+//	switch (button) {
+//	case GLUT_LEFT_BUTTON:   printf("Left button %s at (%3.2f, %3.2f)\n", buttonStat, cX, cY);   break;
+//	case GLUT_MIDDLE_BUTTON: printf("Middle button %s at (%3.2f, %3.2f)\n", buttonStat, cX, cY); break;
+//	case GLUT_RIGHT_BUTTON:  printf("Right button %s at (%3.2f, %3.2f)\n", buttonStat, cX, cY);  break;
+//	}
 }
 
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
-	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
+//	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
 }
