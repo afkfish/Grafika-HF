@@ -82,7 +82,7 @@ vec3 rotateVector(vec3 p, vec3 v, float angle) {
 }
 
 vec3 movePointOnHyper(vec3 p, vec3 v, float t) {
-	return p * coshf(t) + v * sinhf(t);
+	return p * cosh(t) + v * sinh(t);
 }
 
 vec3 castToPoincareDisk(vec3 p1) {
@@ -108,7 +108,6 @@ class HyperbolicCircle {
 
 		pointPatchToHyperboloid(p);
 		v = vectorPatchToPoint(p, v);
-		v = normalize(v);
 
 		for (int i = 0; i < fragments; i++) {
 			v = rotateVector(origin, v, angle);
@@ -148,11 +147,11 @@ public:
 
 	void move(float distance) {
 		this->origin = pointPatchToHyperboloid(movePointOnHyper(origin, vector, distance));
-		this->vector = normalize(vectorPatchToPoint(origin, vector));
+		this->vector = vectorPatchToPoint(origin, vector);
 	}
 
 	void rotate(float angle) {
-		this->vector = rotateVector(origin, vector, angle);
+		this->vector = vectorPatchToPoint(origin, rotateVector(origin, vector, angle));
 	}
 };
 
@@ -196,13 +195,13 @@ void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == 27) {
 		exit(0);
 	} else if (key == 'w') {
-		circle2->move(0.1f);
+		circle2->move(0.05f);
 		glutPostRedisplay();
 	} else if (key == 'a') {
 		circle2->rotate(M_PI/15);
 		glutPostRedisplay();
 	} else if (key == 's') {
-		circle2->move(-0.1f);
+		circle2->move(-0.05f);
 		glutPostRedisplay();
 	} else if (key == 'd') {
 		circle2->rotate(-M_PI/15);
