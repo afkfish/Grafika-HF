@@ -33,7 +33,6 @@
 //=============================================================================================
 #include "framework.h"
 
-// vertex shader in GLSL: It is a Raw string (C++11) since it contains new line characters
 const char * const vertexSource = R"(
 	#version 330				// Shader 3.3
 	precision highp float;		// normal floats, makes no difference on desktop computers
@@ -46,7 +45,6 @@ const char * const vertexSource = R"(
 	}
 )";
 
-// fragment shader in GLSL
 const char * const fragmentSource = R"(
 	#version 330			// Shader 3.3
 	precision highp float;	// normal floats, makes no difference on desktop computers
@@ -58,156 +56,168 @@ const char * const fragmentSource = R"(
 		outColor = vec4(color, 1);	// computed color is the color of the primitive
 	}
 )";
-// VAO and VBO handles
-GLuint circleVAO;
-GLuint circleVBO;
 
-vec3 meroleges(vec3 v, vec3 p) {
+float hyperDot(vec3 v1, vec3 v2) {
+	return (v1.x * v2.x) + (v1.y*v2.y) - (v1.z*v2.z);
+}
+
+vec3 perpendicular(vec3 p, vec3 v) {
 	return cross(vec3(v.x, v.y, -v.z), vec3(p.x, p.y, -p.z));
 }
 
-class Circle {
-	float ori_x, ori_y, radius;
+vec3 vectorPatchToPoint(vec3 p, vec3 v) {
+	if (abs(hyperDot(p, v)) < 1e-7) {
+		return v;
+	}
+	float lambda = (-hyperDot(p, v)) / (hyperDot(p, p));
+	return v + (p * lambda);
+}
+
+vec3 pointPatchToHyperboloid(vec3 p) {
+	return {p.x, p.y, sqrtf(p.x*p.x + p.y*p.y + 1)};
+}
+
+vec3 rotateVector(vec3 p, vec3 v, float angle) {
+	return v*cos(angle) + (perpendicular(p, v) * sin(angle));
+}
+
+vec3 movePointOnHyper(vec3 p, vec3 v, float t) {
+	return p * coshf(t) + v * sinhf(t);
+}
+
+vec3 castToPoincareDisk(vec3 p1) {
+	float t = 1 / (1 + p1.z);
+	return {p1.x*t, p1.y*t, 0};
+}
+
+class HyperbolicCircle {
+	vec3 origin;
+	vec3 vector;
+	float radius;
 	int fragments;
+	unsigned int VAO{}, VBO{};
 	std::vector<float> vertices;
 
 	void computeVertecies() {
-		float angle = 2.0f * 3.1415926f / (float)fragments;
+		float angle = M_PI / ((float) fragments/2);
+		if (!vertices.empty()) {
+			vertices.clear();
+		}
+		vec3 v = this->vector;
+		vec3 p = this->origin;
+
+		pointPatchToHyperboloid(p);
+		v = vectorPatchToPoint(p, v);
+		v = normalize(v);
 
 		for (int i = 0; i < fragments; i++) {
-			float x = radius * cos(angle * i);
-			float y = radius * sin(angle * i);
-			vertices.push_back(x + this->ori_x);
-			vertices.push_back(y + this->ori_y);
+			v = rotateVector(origin, v, angle);
+			v = vectorPatchToPoint(origin, v);
+			p = movePointOnHyper(origin, v, radius);
+			p = castToPoincareDisk(p);
+			vertices.push_back(p.x);
+			vertices.push_back(p.y);
 		}
 	}
 
 public:
-	Circle(float x, float y, float radius, int fragments = 60) {
-		this->ori_x = x;
-		this->ori_y = y;
+	HyperbolicCircle(vec2 origin, float radius, int fragments = 60) {
+		this->origin = pointPatchToHyperboloid(vec3(origin.x, origin.y, 0));
 		this->radius = radius;
 		this->fragments = fragments;
+		this->vector = vectorPatchToPoint(this->origin, vec3(0, 1, 0));
+		this->vertices = std::vector<float>();
 	}
 
 	void draw() {
 		computeVertecies();
-		glGenBuffers(1, &circleVBO);
-		glBindBuffer(GL_ARRAY_BUFFER, circleVBO);
-		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
 
-		vertices.clear();
-
-		glGenVertexArrays(1, &circleVAO);
-		glBindVertexArray(circleVAO);
-		glBindBuffer(GL_ARRAY_BUFFER, circleVBO);
-		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+		glGenVertexArrays(1, &VAO);
+		glBindVertexArray(VAO);
+		glGenBuffers(1, &VBO);
+		glBindBuffer(GL_ARRAY_BUFFER, VBO);
 		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
 
+		glBufferData(GL_ARRAY_BUFFER, fragments * 2 * sizeof(float), vertices.data(), GL_STATIC_DRAW);
 		glDrawArrays(GL_TRIANGLE_FAN, 0, fragments);
 
-		glDeleteBuffers(1, &circleVBO);
-		glDeleteVertexArrays(1, &circleVBO);
+		glDeleteBuffers(1, &VBO);
+		glDeleteVertexArrays(1, &VAO);
 	}
 
-	void move(float x, float y) {
-		this->ori_x += x;
-		this->ori_y += y;
+	void move(float distance) {
+		this->origin = pointPatchToHyperboloid(movePointOnHyper(origin, vector, distance));
+		this->vector = normalize(vectorPatchToPoint(origin, vector));
+	}
+
+	void rotate(float angle) {
+		this->vector = rotateVector(origin, vector, angle);
 	}
 };
 
-// Global variables
-Circle* circle1 = new Circle(0.0f, 0.0f, 1.0f);
-Circle* circle2 = new Circle(0.0f, 0.0f, 0.5f);
-Circle* circle3 = new Circle(0.0f, 0.0f, 0.25f);
+HyperbolicCircle* poincareDisk = new HyperbolicCircle(vec2(0.0f, 0.0f), 20.0f, 60);
 
-GPUProgram gpuProgram; // vertex and fragment shaders
-//unsigned int vao;	   // virtual world on the GPU
+HyperbolicCircle* circle1 = new HyperbolicCircle(vec2(0.0f, 0.0f), 0.5f, 60);
+HyperbolicCircle* circle2 = new HyperbolicCircle(vec2(0.0f, 0.0f), 0.5f, 60);
 
-// Initialization, create an OpenGL context
+GPUProgram gpuProgram;
+
 void onInitialization() {
 	glViewport(0, 0, windowWidth, windowHeight);
-
-	// create program for the GPU
 	gpuProgram.create(vertexSource, fragmentSource, "outColor");
-}
 
-// Window has become invalid: Redraw
-void onDisplay() {
-	glClearColor(216.0f/255, 216.0f/255, 216.0f/255, 0);     // background color
-	glClear(GL_COLOR_BUFFER_BIT); // clear frame buffer
-
-	int color = glGetUniformLocation(gpuProgram.getId(), "color");
-	glUniform3f(color, 36.0f/255, 89.0f/255, 83.0f/255); // 3 floats
-
-	float MVPtransf[4][4] = { 1, 0, 0, 0,    // MVP matrix,
-							  0, 1, 0, 0,    // row-major!
+	float MVPtransf[4][4] = { 1, 0, 0, 0,
+							  0, 1, 0, 0,
 							  0, 0, 1, 0,
 							  0, 0, 0, 1 };
 
-	int location = glGetUniformLocation(gpuProgram.getId(), "MVP");	// Get the GPU location of uniform variable MVP
-	glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);	// Load a 4x4 row-major float matrix to the specified location
+	int location = glGetUniformLocation(gpuProgram.getId(), "MVP");
+	glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);
+}
 
+void onDisplay() {
+	glClearColor(216.0f/255, 216.0f/255, 216.0f/255, 0);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	int color = glGetUniformLocation(gpuProgram.getId(), "color");
+	glUniform3f(color, 147.0f/255, 147.0f/255, 147.0f/255);
+	poincareDisk->draw();
+
+	glUniform3f(color, 36.0f/255, 89.0f/255, 83.0f/255);
 	circle1->draw();
 	glUniform3f(color, 64.0f/255, 142.0f/255, 145.0f/255);
 	circle2->draw();
-	glUniform3f(color, 36.0f/255, 89.0f/255, 83.0f/255);
-	circle3->draw();
 
-	glutSwapBuffers(); // exchange buffers for double buffering
+	glutSwapBuffers();
 }
 
-// Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
-	if (key == 27) { // ESCAPE key
+	if (key == 27) {
 		exit(0);
 	} else if (key == 'w') {
-		circle2->move(0.0f, 0.05f);
+		circle2->move(0.1f);
 		glutPostRedisplay();
 	} else if (key == 'a') {
-		circle2->move(-0.05f, 0.0f);
+		circle2->rotate(M_PI/15);
 		glutPostRedisplay();
 	} else if (key == 's') {
-		circle2->move(0.0f, -0.05f);
+		circle2->move(-0.1f);
 		glutPostRedisplay();
 	} else if (key == 'd') {
-		circle2->move(0.05f, 0.0f);
+		circle2->rotate(-M_PI/15);
 		glutPostRedisplay();
 	}
 }
 
-// Key of ASCII code released
-void onKeyboardUp(unsigned char key, int pX, int pY) {
-}
+void onKeyboardUp(unsigned char key, int pX, int pY) {}
 
-// Move mouse with key pressed
-void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the cursor in the coordinate system of the operation system
-	// Convert to normalized device space
-//	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
-//	float cY = 1.0f - 2.0f * pY / windowHeight;
-//	printf("Mouse moved to (%3.2f, %3.2f)\n", cX, cY);
-}
+void onMouseMotion(int pX, int pY) {}
 
-// Mouse click event
-void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel coordinates of the cursor in the coordinate system of the operation system
-	// Convert to normalized device space
-//	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
-//	float cY = 1.0f - 2.0f * pY / windowHeight;
-//
-//	char * buttonStat;
-//	switch (state) {
-//	case GLUT_DOWN: buttonStat = "pressed"; break;
-//	case GLUT_UP:   buttonStat = "released"; break;
-//	}
-//
-//	switch (button) {
-//	case GLUT_LEFT_BUTTON:   printf("Left button %s at (%3.2f, %3.2f)\n", buttonStat, cX, cY);   break;
-//	case GLUT_MIDDLE_BUTTON: printf("Middle button %s at (%3.2f, %3.2f)\n", buttonStat, cX, cY); break;
-//	case GLUT_RIGHT_BUTTON:  printf("Right button %s at (%3.2f, %3.2f)\n", buttonStat, cX, cY);  break;
-//	}
-}
+void onMouse(int button, int state, int pX, int pY) {}
 
-// Idle event indicating that some time elapsed: do animation here
 void onIdle() {
-//	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
+	circle1->rotate(-M_PI/180);
+	circle1->move(0.01f);
+	glutPostRedisplay();
 }
