@@ -48,7 +48,7 @@ const char * const vertexSource = R"(
 const char * const fragmentSource = R"(
 	#version 330			// Shader 3.3
 	precision highp float;	// normal floats, makes no difference on desktop computers
-	
+
 	uniform vec3 color;		// uniform variable, the color of the primitive
 	out vec4 outColor;		// computed color of the current pixel
 
@@ -61,7 +61,15 @@ float hyperDot(vec3 v1, vec3 v2) {
 	return (v1.x * v2.x) + (v1.y*v2.y) - (v1.z*v2.z);
 }
 
-vec3 perpendicular(vec3 p, vec3 v) {
+float length_h(const vec3& v) {
+	return sqrtf(hyperDot(v, v));
+}
+
+vec3 hyperNormalize(const vec3& v) {
+	return v * (1 / length_h(v));
+}
+
+vec3 perpendicular(vec3 v, vec3 p) {
 	return cross(vec3(v.x, v.y, -v.z), vec3(p.x, p.y, -p.z));
 }
 
@@ -78,16 +86,17 @@ vec3 pointPatchToHyperboloid(vec3 p) {
 }
 
 vec3 rotateVector(vec3 p, vec3 v, float angle) {
-	return v*cos(angle) + (perpendicular(p, v) * sin(angle));
+	return v*cosf(angle) + (perpendicular(v, p) * sinf(angle));
 }
 
 vec3 movePointOnHyper(vec3 p, vec3 v, float t) {
-	return p * cosh(t) + v * sinh(t);
+	return p * coshf(t) + v * sinhf(t);
 }
 
 vec3 castToPoincareDisk(vec3 p1) {
-	float t = 1 / (1 + p1.z);
-	return {p1.x*t, p1.y*t, 0};
+	p1 = pointPatchToHyperboloid(p1);
+	float t = 1 + p1.z;
+	return {p1.x/t, p1.y/t, 0};
 }
 
 class HyperbolicCircle {
@@ -97,38 +106,45 @@ class HyperbolicCircle {
 	int fragments;
 	unsigned int VAO{}, VBO{};
 	std::vector<float> vertices;
-
+public:
 	void computeVertecies() {
 		float angle = M_PI / ((float) fragments/2);
 		if (!vertices.empty()) {
 			vertices.clear();
 		}
-		vec3 v = this->vector;
-		vec3 p = this->origin;
-
-		pointPatchToHyperboloid(p);
-		v = vectorPatchToPoint(p, v);
+		vec3 v = vector;
+		v = vectorPatchToPoint(origin, v);
+		v = hyperNormalize(v);
 
 		for (int i = 0; i < fragments; i++) {
-			v = rotateVector(origin, v, angle);
-			v = vectorPatchToPoint(origin, v);
-			p = movePointOnHyper(origin, v, radius);
+			v = hyperNormalize(vectorPatchToPoint(origin, rotateVector(origin, v, angle)));
+			vec3 p = movePointOnHyper(origin, v, radius);
+			p = pointPatchToHyperboloid(p);
+
 			p = castToPoincareDisk(p);
 			vertices.push_back(p.x);
 			vertices.push_back(p.y);
 		}
 	}
 
-public:
 	HyperbolicCircle(vec2 origin, float radius, int fragments = 60) {
 		this->origin = pointPatchToHyperboloid(vec3(origin.x, origin.y, 0));
 		this->radius = radius;
 		this->fragments = fragments;
-		this->vector = vectorPatchToPoint(this->origin, vec3(0, 1, 0));
+		this->vector = hyperNormalize(vectorPatchToPoint(this->origin, vec3(0, 1, 0)));
 		this->vertices = std::vector<float>();
 	}
 
-	void draw() {
+	HyperbolicCircle(vec3 origin, vec3 direction, float radius, int fragments = 60) {
+		this->origin = pointPatchToHyperboloid(origin);
+		this->radius = radius;
+		this->fragments = fragments;
+		this->vector = hyperNormalize(vectorPatchToPoint(this->origin, direction));
+		this->vertices = std::vector<float>();
+	}
+
+	void draw(int color, vec3 colorVec) {
+		glUniform3f(color, colorVec.x, colorVec.y, colorVec.z);
 		computeVertecies();
 
 		glGenVertexArrays(1, &VAO);
@@ -136,7 +152,7 @@ public:
 		glGenBuffers(1, &VBO);
 		glBindBuffer(GL_ARRAY_BUFFER, VBO);
 		glEnableVertexAttribArray(0);
-		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
 
 		glBufferData(GL_ARRAY_BUFFER, fragments * 2 * sizeof(float), vertices.data(), GL_STATIC_DRAW);
 		glDrawArrays(GL_TRIANGLE_FAN, 0, fragments);
@@ -145,20 +161,123 @@ public:
 		glDeleteVertexArrays(1, &VAO);
 	}
 
+	void setOrigin(vec3 point, vec3 direction) {
+		this->origin = pointPatchToHyperboloid(point);
+		this->vector = hyperNormalize(vectorPatchToPoint(this->origin, direction));
+	}
+};
+
+class Trail {
+	std::vector<float> trail;
+	unsigned VAO{}, VBO{};
+
+public:
+	void addPoint(vec3 pt) {
+		vec3 p = pointPatchToHyperboloid(pt);
+		p = castToPoincareDisk(p);
+		trail.push_back(p.x);
+		trail.push_back(p.y);
+	}
+
+	void draw() {
+		if (!trail.empty()){
+			glGenVertexArrays(1, &VAO);
+			glBindVertexArray(VAO);
+			glGenBuffers(1, &VBO);
+			glBindBuffer(GL_ARRAY_BUFFER, VBO);
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+			glBufferData(GL_ARRAY_BUFFER, trail.size() * sizeof(float), trail.data(), GL_STATIC_DRAW);
+			glDrawArrays(GL_LINE_STRIP, 0, (int) trail.size() / 2);
+
+			glDeleteBuffers(1, &VBO);
+			glDeleteVertexArrays(1, &VBO);
+		}
+	}
+};
+
+class Hami {
+	HyperbolicCircle* body;
+	HyperbolicCircle* eye1{};
+	HyperbolicCircle* eye2{};
+	HyperbolicCircle* mouth{};
+	Trail* trail{};
+	float radius;
+	vec3 position;
+	vec3 direction;
+
+	void recalculateBody() {
+		vec3 pos = position;
+		vec3 tempDir = hyperNormalize(rotateVector(pos, this->direction, M_PI / 4));
+		vec3 eye1Pos = pointPatchToHyperboloid(movePointOnHyper(pos, tempDir, radius));
+		if (this->eye1 == nullptr)
+			this->eye1 = new HyperbolicCircle(vec2(eye1Pos.x, eye1Pos.y), this->direction, radius/4);
+		else
+			this->eye1->setOrigin(eye1Pos, this->direction);
+		pos = position;
+		tempDir = hyperNormalize(rotateVector(pos, this->direction, -M_PI / 4));
+		vec3 eye2Pos = pointPatchToHyperboloid(movePointOnHyper(pos, tempDir, radius));
+		if (this->eye2 == nullptr)
+			this->eye2 = new HyperbolicCircle(vec2(eye2Pos.x, eye2Pos.y), this->direction, radius/4);
+		else
+			this->eye2->setOrigin(eye2Pos, this->direction);
+		pos = position;
+		vec3 mouthPos = pointPatchToHyperboloid(movePointOnHyper(pos, this->direction, radius));
+		if (this->mouth == nullptr)
+			this->mouth = new HyperbolicCircle(vec2(mouthPos.x, mouthPos.y), this->direction, radius/3);
+		else
+			this->mouth->setOrigin(mouthPos, this->direction);
+		if (this->trail == nullptr)
+			trail = new Trail();
+	}
+
+public:
+	Hami(vec2 position, float radius) {
+		this->radius = radius;
+		this->position = pointPatchToHyperboloid(vec3(position.x, position.y, 0));
+		this->direction = hyperNormalize(vectorPatchToPoint(this->position, vec3(0, 1, 0)));
+		this->body = new HyperbolicCircle(position, direction, radius, 60);
+		this->recalculateBody();
+	}
+
+	void drawTrail(int color) {
+		glUniform3f(color, 1.0f, 1.0f, 1.0f);
+		if (trail != nullptr)
+			trail->draw();
+	}
+
+	void draw(int color, vec3 colorVec) {
+		body->draw(color, colorVec);
+		glUniform3f(color, 1.0f, 1.0f, 1.0f);
+		if (eye1 != nullptr && eye2 != nullptr && mouth != nullptr) {
+			eye1->draw(color, vec3(1, 1, 1));
+			eye2->draw(color, vec3(1, 1, 1));
+			glUniform3f(color, 0.0f, 0.0f, 0.0f);
+			mouth->draw(color, vec3(0, 0, 0));
+			glUniform3f(color, 1.0f, 1.0f, 1.0f);
+		}
+	}
+
 	void move(float distance) {
-		this->origin = pointPatchToHyperboloid(movePointOnHyper(origin, vector, distance));
-		this->vector = vectorPatchToPoint(origin, vector);
+		this->position = pointPatchToHyperboloid(movePointOnHyper(position, direction, distance));
+		this->direction = hyperNormalize(vectorPatchToPoint(position, direction));
+		this->body->setOrigin(this->position, this->direction);
+		this->recalculateBody();
+		trail->addPoint(position);
 	}
 
 	void rotate(float angle) {
-		this->vector = vectorPatchToPoint(origin, rotateVector(origin, vector, angle));
+		this->direction = hyperNormalize(vectorPatchToPoint(position, rotateVector(position, direction, angle)));
+		this->body->setOrigin(this->position, this->direction);
+		this->recalculateBody();
 	}
 };
 
 HyperbolicCircle* poincareDisk = new HyperbolicCircle(vec2(0.0f, 0.0f), 20.0f, 60);
 
-HyperbolicCircle* circle1 = new HyperbolicCircle(vec2(0.0f, 0.0f), 0.5f, 60);
-HyperbolicCircle* circle2 = new HyperbolicCircle(vec2(0.0f, 0.0f), 0.5f, 60);
+Hami* hami1 = new Hami(vec2(0.0f, 0.0f), 0.5f);
+Hami* hami2 = new Hami(vec2(0.0f, 0.0f), 0.5f);
 
 GPUProgram gpuProgram;
 
@@ -176,47 +295,74 @@ void onInitialization() {
 }
 
 void onDisplay() {
-	glClearColor(216.0f/255, 216.0f/255, 216.0f/255, 0);
+	glClearColor(147.0f/255, 147.0f/255, 147.0f/255, 0);
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	int color = glGetUniformLocation(gpuProgram.getId(), "color");
-	glUniform3f(color, 147.0f/255, 147.0f/255, 147.0f/255);
-	poincareDisk->draw();
+	poincareDisk->draw(color, vec3(0, 0, 0));
 
-	glUniform3f(color, 36.0f/255, 89.0f/255, 83.0f/255);
-	circle1->draw();
-	glUniform3f(color, 64.0f/255, 142.0f/255, 145.0f/255);
-	circle2->draw();
+	hami2->drawTrail(color);
+	hami1->drawTrail(color);
+
+	hami2->draw(color, vec3(0, 1, 0));
+	hami1->draw(color, vec3(1, 0, 0));
 
 	glutSwapBuffers();
 }
 
+bool s = false;
+bool e = false;
+bool f = false;
+
 void onKeyboard(unsigned char key, int pX, int pY) {
-	if (key == 27) {
-		exit(0);
-	} else if (key == 'w') {
-		circle2->move(0.05f);
-		glutPostRedisplay();
-	} else if (key == 'a') {
-		circle2->rotate(M_PI/15);
-		glutPostRedisplay();
-	} else if (key == 's') {
-		circle2->move(-0.05f);
-		glutPostRedisplay();
-	} else if (key == 'd') {
-		circle2->rotate(-M_PI/15);
-		glutPostRedisplay();
+	switch (key) {
+		case 's':
+			s = true;
+			break;
+		case 'e':
+			e = true;
+			break;
+		case 'f':
+			f = true;
+			break;
+		case 27:
+			exit(0);
+		default:
+			break;
 	}
 }
 
-void onKeyboardUp(unsigned char key, int pX, int pY) {}
+void onKeyboardUp(unsigned char key, int pX, int pY) {
+	switch (key) {
+		case 's':
+			s = false;
+			break;
+		case 'e':
+			e = false;
+			break;
+		case 'f':
+			f = false;
+			break;
+		default:
+			break;
+	}
+}
 
 void onMouseMotion(int pX, int pY) {}
 
 void onMouse(int button, int state, int pX, int pY) {}
 
 void onIdle() {
-	circle1->rotate(-M_PI/180);
-	circle1->move(0.01f);
+	if (s) {
+		hami1->rotate(-M_PI/60);
+	}
+	if (e) {
+		hami1->move(0.04f);
+	}
+	if (f) {
+		hami1->rotate(M_PI/60);
+	}
+	hami2->move(0.04f);
+	hami2->rotate(-M_PI/60);
 	glutPostRedisplay();
 }
