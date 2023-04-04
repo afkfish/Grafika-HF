@@ -57,16 +57,16 @@ const char * const fragmentSource = R"(
 	}
 )";
 
-float hyperDot(vec3 v1, vec3 v2) {
+float hyperbolicDot(vec3 v1, vec3 v2) {
 	return (v1.x * v2.x) + (v1.y*v2.y) - (v1.z*v2.z);
 }
 
-float length_h(const vec3& v) {
-	return sqrtf(hyperDot(v, v));
+float hyperbolicLength(const vec3& v) {
+	return sqrtf(hyperbolicDot(v, v));
 }
 
-vec3 hyperNormalize(const vec3& v) {
-	return v * (1 / length_h(v));
+vec3 hyperbolicNormalize(const vec3& v) {
+	return v * (1 / hyperbolicLength(v));
 }
 
 vec3 perpendicular(vec3 v, vec3 p) {
@@ -74,10 +74,9 @@ vec3 perpendicular(vec3 v, vec3 p) {
 }
 
 vec3 vectorPatchToPoint(vec3 p, vec3 v) {
-	if (abs(hyperDot(p, v)) < 1e-7) {
+	if (abs(hyperbolicDot(p, v)) < 1e-7)
 		return v;
-	}
-	float lambda = (-hyperDot(p, v)) / (hyperDot(p, p));
+	float lambda = (-hyperbolicDot(p, v)) / (hyperbolicDot(p, p));
 	return v + (p * lambda);
 }
 
@@ -89,14 +88,13 @@ vec3 rotateVector(vec3 p, vec3 v, float angle) {
 	return v*cosf(angle) + (perpendicular(v, p) * sinf(angle));
 }
 
-vec3 movePointOnHyper(vec3 p, vec3 v, float t) {
+vec3 movePointOnHyperboloid(vec3 p, vec3 v, float t) {
 	return p * coshf(t) + v * sinhf(t);
 }
 
 vec3 castToPoincareDisk(vec3 p1) {
 	p1 = pointPatchToHyperboloid(p1);
-	float t = 1 + p1.z;
-	return {p1.x/t, p1.y/t, 0};
+	return {p1.x/(1 + p1.z), p1.y/(1 + p1.z), 0};
 }
 
 vec3 pointDirection(vec3 p, vec3 q) {
@@ -113,17 +111,14 @@ class HyperbolicCircle {
 public:
 	void computeVertecies() {
 		float angle = M_PI / ((float) fragments/2);
-		if (!vertices.empty()) {
-			vertices.clear();
-		}
-		vec3 v = vector;
-		v = vectorPatchToPoint(origin, v);
-		v = hyperNormalize(v);
+		vertices.clear();
+
+		vec3 v = vectorPatchToPoint(origin, vector);
+		v = hyperbolicNormalize(v);
 
 		for (int i = 0; i < fragments; i++) {
-			v = hyperNormalize(vectorPatchToPoint(origin, rotateVector(origin, v, angle)));
-			vec3 p = movePointOnHyper(origin, v, radius);
-			p = pointPatchToHyperboloid(p);
+			v = hyperbolicNormalize(vectorPatchToPoint(origin, rotateVector(origin, v, angle)));
+			vec3 p = pointPatchToHyperboloid(movePointOnHyperboloid(origin, v, radius));
 
 			p = castToPoincareDisk(p);
 			vertices.push_back(p.x);
@@ -135,7 +130,7 @@ public:
 		this->origin = pointPatchToHyperboloid(vec3(origin.x, origin.y, 0));
 		this->radius = radius;
 		this->fragments = fragments;
-		this->vector = hyperNormalize(vectorPatchToPoint(this->origin, vec3(0, 1, 0)));
+		this->vector = hyperbolicNormalize(vectorPatchToPoint(this->origin, vec3(0, 1, 0)));
 		this->vertices = std::vector<float>();
 	}
 
@@ -143,7 +138,7 @@ public:
 		this->origin = pointPatchToHyperboloid(origin);
 		this->radius = radius;
 		this->fragments = fragments;
-		this->vector = hyperNormalize(vectorPatchToPoint(this->origin, direction));
+		this->vector = hyperbolicNormalize(vectorPatchToPoint(this->origin, direction));
 		this->vertices = std::vector<float>();
 	}
 
@@ -167,24 +162,23 @@ public:
 
 	void setOrigin(vec3 point, vec3 direction) {
 		this->origin = pointPatchToHyperboloid(point);
-		this->vector = hyperNormalize(vectorPatchToPoint(this->origin, direction));
+		this->vector = hyperbolicNormalize(vectorPatchToPoint(this->origin, direction));
 	}
 };
 
 class Trail {
 	std::vector<float> trail;
-	unsigned VAO{}, VBO{};
+	unsigned int VAO{}, VBO{};
 
 public:
 	void addPoint(vec3 pt) {
-		vec3 p = pointPatchToHyperboloid(pt);
-		p = castToPoincareDisk(p);
+		vec3 p = castToPoincareDisk(pointPatchToHyperboloid(pt));
 		trail.push_back(p.x);
 		trail.push_back(p.y);
 	}
 
 	void draw() {
-		if (!trail.empty()){
+		if (!trail.empty()) {
 			glGenVertexArrays(1, &VAO);
 			glBindVertexArray(VAO);
 			glGenBuffers(1, &VBO);
@@ -209,16 +203,18 @@ class Hami {
     HyperbolicCircle* pupil2{};
 	HyperbolicCircle* mouth{};
 	Trail* trail{};
+	int i = 0;
 	float radius;
+	float mouthOffset;
     vec3 direction;
     vec3 otherHamiPos;
 
 	void recalculateBody() {
 		vec3 pos = position;
-		vec3 tempDir = hyperNormalize(rotateVector(pos, this->direction, M_PI / 4));
-		vec3 eye1Pos = pointPatchToHyperboloid(movePointOnHyper(pos, tempDir, radius));
-        vec3 pupil1Dir = hyperNormalize(vectorPatchToPoint(eye1Pos, pointDirection(otherHamiPos, eye1Pos)));
-        vec3 pupil1pos = pointPatchToHyperboloid(movePointOnHyper(eye1Pos, pupil1Dir, radius / 8));
+		vec3 tempDir = hyperbolicNormalize(rotateVector(pos, this->direction, M_PI / 4));
+		vec3 eye1Pos = pointPatchToHyperboloid(movePointOnHyperboloid(pos, tempDir, radius));
+        vec3 pupil1Dir = hyperbolicNormalize(vectorPatchToPoint(eye1Pos, pointDirection(otherHamiPos, eye1Pos)));
+        vec3 pupil1pos = pointPatchToHyperboloid(movePointOnHyperboloid(eye1Pos, pupil1Dir, radius / 8));
 		if (this->eye1 == nullptr || this->pupil1 == nullptr) {
             this->eye1 = new HyperbolicCircle(vec2(eye1Pos.x, eye1Pos.y), this->direction, radius / 4);
             this->pupil1 = new HyperbolicCircle(vec2(pupil1pos.x, pupil1pos.y), this->direction, radius / 8);
@@ -227,10 +223,10 @@ class Hami {
             this->pupil1->setOrigin(pupil1pos, this->direction);
         }
 		pos = position;
-		tempDir = hyperNormalize(rotateVector(pos, this->direction, -M_PI / 4));
-		vec3 eye2Pos = pointPatchToHyperboloid(movePointOnHyper(pos, tempDir, radius));
-        vec3 pupil2Dir = hyperNormalize(vectorPatchToPoint(eye2Pos, pointDirection(otherHamiPos, eye2Pos)));
-        vec3 pupil2pos = pointPatchToHyperboloid(movePointOnHyper(eye2Pos, pupil2Dir, radius / 8));
+		tempDir = hyperbolicNormalize(rotateVector(pos, this->direction, -M_PI / 4));
+		vec3 eye2Pos = pointPatchToHyperboloid(movePointOnHyperboloid(pos, tempDir, radius));
+        vec3 pupil2Dir = hyperbolicNormalize(vectorPatchToPoint(eye2Pos, pointDirection(otherHamiPos, eye2Pos)));
+        vec3 pupil2pos = pointPatchToHyperboloid(movePointOnHyperboloid(eye2Pos, pupil2Dir, radius / 8));
 		if (this->eye2 == nullptr || this->pupil2 == nullptr) {
             this->eye2 = new HyperbolicCircle(vec2(eye2Pos.x, eye2Pos.y), this->direction, radius / 4);
             this->pupil2 = new HyperbolicCircle(vec2(pupil2pos.x, pupil2pos.y), this->direction, radius / 8);
@@ -239,7 +235,8 @@ class Hami {
             this->pupil2->setOrigin(pupil2pos, this->direction);
 		}
 		pos = position;
-		vec3 mouthPos = pointPatchToHyperboloid(movePointOnHyper(pos, this->direction, radius));
+		vec3 mouthPos = pointPatchToHyperboloid(
+				movePointOnHyperboloid(pos, this->direction, radius * 1.25f + (mouthOffset * radius / 3)));
 		if (this->mouth == nullptr)
 			this->mouth = new HyperbolicCircle(vec2(mouthPos.x, mouthPos.y), this->direction, radius/3);
 		else
@@ -254,7 +251,7 @@ public:
 	Hami(vec2 position, float radius, vec3 otherHamiPos) {
 		this->radius = radius;
 		this->position = pointPatchToHyperboloid(vec3(position.x, position.y, 0));
-		this->direction = hyperNormalize(vectorPatchToPoint(this->position, vec3(0, 1, 0)));
+		this->direction = hyperbolicNormalize(vectorPatchToPoint(this->position, vec3(0, 1, 0)));
 		this->body = new HyperbolicCircle(position, direction, radius);
         this->otherHamiPos = otherHamiPos;
 		this->recalculateBody();
@@ -262,40 +259,40 @@ public:
 
 	void drawTrail(int color) {
 		glUniform3f(color, 1.0f, 1.0f, 1.0f);
-		if (trail != nullptr)
-			trail->draw();
+		trail->draw();
 	}
 
 	void draw(int color, vec3 colorVec) {
 		body->draw(color, colorVec);
 		glUniform3f(color, 1.0f, 1.0f, 1.0f);
-		if (eye1 != nullptr && eye2 != nullptr && mouth != nullptr && pupil1 != nullptr && pupil2 != nullptr) {
-			eye1->draw(color, vec3(1, 1, 1));
-            pupil1->draw(color, vec3(0, 0, 1));
-			eye2->draw(color, vec3(1, 1, 1));
-            pupil2->draw(color, vec3(0, 0, 1));
-			glUniform3f(color, 0.0f, 0.0f, 0.0f);
-			mouth->draw(color, vec3(0, 0, 0));
-			glUniform3f(color, 1.0f, 1.0f, 1.0f);
-		}
+		eye1->draw(color, vec3(1, 1, 1));
+		pupil1->draw(color, vec3(0, 0, 1));
+		eye2->draw(color, vec3(1, 1, 1));
+		pupil2->draw(color, vec3(0, 0, 1));
+		glUniform3f(color, 0.0f, 0.0f, 0.0f);
+		mouth->draw(color, vec3(0, 0, 0));
+		glUniform3f(color, 1.0f, 1.0f, 1.0f);
 	}
 
 	void move(float distance) {
-		this->position = pointPatchToHyperboloid(movePointOnHyper(position, direction, distance));
-		this->direction = hyperNormalize(vectorPatchToPoint(position, direction));
+		this->position = pointPatchToHyperboloid(movePointOnHyperboloid(position, direction, distance));
+		this->direction = hyperbolicNormalize(vectorPatchToPoint(position, direction));
 		this->body->setOrigin(this->position, this->direction);
 		this->recalculateBody();
 		trail->addPoint(position);
 	}
 
 	void rotate(float angle) {
-		this->direction = hyperNormalize(vectorPatchToPoint(position, rotateVector(position, direction, angle)));
+		this->direction = hyperbolicNormalize(vectorPatchToPoint(position, rotateVector(position, direction, angle)));
 		this->body->setOrigin(this->position, this->direction);
 		this->recalculateBody();
 	}
 
-    void setOtherHamiPos(vec3 otherPos) {
+    void update(vec3 otherPos) {
         this->otherHamiPos = otherPos;
+		this->i ++;
+		if (i >= 120) i = 0;
+		this->mouthOffset = sinf(0 - i*M_PI/120);
         recalculateBody();
     }
 };
@@ -336,9 +333,7 @@ void onDisplay() {
 	glutSwapBuffers();
 }
 
-bool s = false;
-bool e = false;
-bool f = false;
+bool s, e, f;
 
 void onKeyboard(unsigned char key, int pX, int pY) {
 	switch (key) {
@@ -391,7 +386,7 @@ void onIdle() {
 	hami2->move(0.04f);
 	hami2->rotate(-M_PI/60);
 
-    hami1->setOtherHamiPos(hami2->position);
-    hami2->setOtherHamiPos(hami1->position);
+	hami1->update(hami2->position);
+	hami2->update(hami1->position);
 	glutPostRedisplay();
 }
