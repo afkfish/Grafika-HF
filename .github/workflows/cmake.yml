@@ -16,26 +16,14 @@ jobs:
     - name: Setup Xcode version
       uses: maxim-lobanov/setup-xcode@v1
 
-    - name: Configure CMake
+    - name: Configure CMake for HF1
       run: cmake ./HF1 -B ${{github.workspace}}/HF1/build
 
-    - name: Build
+    - name: Build HF1
       run: cmake --build ${{github.workspace}}/HF1/build
 
-  hf2-build:
-    runs-on: macos-latest
-
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: Setup Xcode version
-      uses: maxim-lobanov/setup-xcode@v1
-
-    - name: Go to HF2
-      run: cd HF2
-
-    - name: Configure CMake
+    - name: Configure CMake for HF2
       run: cmake ./HF2 -B ${{github.workspace}}/HF2/build
 
-    - name: Build
+    - name: Build HF2
       run: cmake --build ${{github.workspace}}/HF2/build
