@@ -23,7 +23,7 @@ jobs:
 #      run: cmake ./HF1 -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build
-      run: cmake ./HF1 --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+      run: cmake ./HF1 --build ${{github.workspace}}/build
 
   hf2-build:
     runs-on: macos-latest
@@ -38,7 +38,7 @@ jobs:
       run: cd HF2
 
     - name: Configure CMake
-      run: cmake ./HF2 -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: cmake ./HF2 -B ${{github.workspace}}/build
 
     - name: Build
-      run: cmake ./HF2 --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+      run: cmake ./HF2 --build ${{github.workspace}}/build
