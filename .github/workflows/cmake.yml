@@ -19,6 +19,9 @@ jobs:
     - name: Go to HF1
       run: cd HF1
 
+    - name: wtf
+      run: ls -la
+
     - name: Configure CMake
       run: cmake -B ${{github.workspace}}/HF1/build
 
