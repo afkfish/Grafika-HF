@@ -10,21 +10,28 @@ Legegyszerűbb ezt egyben megtenni a [MSYS2](https://www.msys2.org/) segíségé
 2. Ezután telepítjük a **freeglut**-ot és a **glew**-t a következő commanddal az **msys**-ben.
 
 `pacman -S mingw-w64-ucrt-x86_64-freeglut &&  pacman -S mingw-w64-ucrt-x86_64-glew`
-3. Ha sikeresen települt bezárhatjuk az MSYS-t.
+
+3.Ha sikeresen települt bezárhatjuk az MSYS-t.
 ### Clion
 Ahoz hogy fejleszteni tudj először egy környezet kell és a legegyszerűbb a [CLion](https://www.jetbrains.com/clion/download/).
 > Ez ingyenesen használható az egyetem álltal a bme-s email-el
 1. Miután települt nyisd meg a projektet és fel fog dobni egy ablakot ahol ki lehet választani hogy milyen "**toolchain**"-t akarunk használni.
 > Ha nem dobja fel akkor a file menüben a settings fül alatta a "Build, execution, deployment" menü alatt a toolchains-t kell válasznani amiben ha van MinGW akkor arra nyomj rá ha nincsen akkor a + ikonra és adj hozzá.
 2. Itt állítsuk át a **bundled**-et a **Toolset**-nél `C:\msys64\ucrt64`-re.
-![segitseg](doc/custom-toolchain.png)
+![Segítség](doc/custom-toolchain.png)
 3. Ezután már tudod is használni a projektet.
 
+> Ha a saját projektedben nem megy valami a fordítással de itt igen, akkor ki tudod másolni a **CMakeLists.txt**-t ami a konfigurálás után a te projektedben is működni fog.
+
 ### MacOS
+> Beszerezni egy c++ compiler-t macOS-en sokkal egyszerübb és még az OpenGL és a FreeGlut is benne van.
+1. Nyisd meg a terminált és telepítsd a **command line tools**-t a következő paranccsal.
 
+`xcode-select --install`
 
+2. Ezután már tudod is használni a projektet.
 
-
+> Ha a saját projektedben nem megy valami a fordítással de itt igen, akkor ki tudod másolni a **CMakeLists.txt**-t ami a konfigurálás után a te projektedben is működni fog.
 
 ## HF1 - Hiperbolikus "UFO-hami"
 [Project link](./HF1)

@@ -14,8 +14,8 @@ add_executable(Skeleton
         Skeleton.cpp)
 
 if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    copy_resolved_framework_into_bundle(OpenGL)
-    copy_resolved_framework_into_bundle(GLUT)
+    target_link_libraries(Skeleton "-framework OpenGL")
+    target_link_libraries(Skeleton "-framework GLUT")
 elseif (CMAKE_SYSTEM_NAME MATCHES "Windows")
     target_link_libraries(Skeleton freeglut)
     target_link_libraries(Skeleton glew32)
